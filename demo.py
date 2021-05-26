@@ -17,6 +17,7 @@ from utils.utils import InputPadder
 
 DEVICE = 'cuda'
 
+
 def load_image(imfile):
     img = np.array(Image.open(imfile)).astype(np.uint8)
     img = torch.from_numpy(img).permute(2, 0, 1).float()
@@ -24,6 +25,7 @@ def load_image(imfile):
 
 
 def viz(img, flo):
+    
     img = img[0].permute(1,2,0).cpu().numpy()
     flo = flo[0].permute(1,2,0).cpu().numpy()
     
@@ -31,15 +33,14 @@ def viz(img, flo):
     flo = flow_viz.flow_to_image(flo)
     img_flo = np.concatenate([img, flo], axis=0)
 
-    import matplotlib.pyplot as plt
-    plt.imshow(img_flo / 255.0)
-    plt.show()
+    # import matplotlib.pyplot as plt
+    # plt.imshow(img_flo / 255.0)
+    # plt.show()
 
-    #cv2.namedWindow("image")
     #cv2.imshow('image', img_flo[:, :, [2,1,0]]/255.0)
     #cv2.waitKey()
-    #cv2.imwrite("tmp/img_flo_{}.jpg", img_flo)
-
+    #cv2.imwrite("tmp/img_flow_{}.jpg".format(i), img_flo)
+    return img_flo
 
 def demo(args):
     model = torch.nn.DataParallel(RAFT(args))
@@ -54,15 +55,18 @@ def demo(args):
                  glob.glob(os.path.join(args.path, '*.jpg'))
         
         images = sorted(images)
+        i = 1
         for imfile1, imfile2 in zip(images[:-1], images[1:]):
             image1 = load_image(imfile1)
             image2 = load_image(imfile2)
 
             padder = InputPadder(image1.shape)
             image1, image2 = padder.pad(image1, image2)
-
             flow_low, flow_up = model(image1, image2, iters=20, test_mode=True)
-            viz(image1, flow_up)
+            #viz(image1, flow_up)
+            cv2.imwrite("tmp/img_flow_{}.jpg".format(i), viz(image1, flow_up))
+            i = i + 1
+
 
 
 if __name__ == '__main__':
