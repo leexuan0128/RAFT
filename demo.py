@@ -1,5 +1,6 @@
 import sys
-sys.path.append('core')
+sys.path.append(r'/home/xuanli//RAFT')
+sys.path.append(r'/home/xuanli//RAFT/core')
 
 import argparse
 import os
@@ -13,10 +14,8 @@ from raft import RAFT
 from utils import flow_viz
 from utils.utils import InputPadder
 
-
-
-DEVICE = 'cuda'
-
+# DEVICE = 'CUDA'
+DEVICE = 'cpu'
 
 def load_image(imfile):
     img = np.array(Image.open(imfile)).astype(np.uint8)
@@ -28,11 +27,13 @@ def viz(img, flo):
     
     img = img[0].permute(1,2,0).cpu().numpy()
     flo = flo[0].permute(1,2,0).cpu().numpy()
+    print(flo)
+    writeFlow("raft_flow.flo", flo)
     
     # map flow to rgb image
     flo = flow_viz.flow_to_image(flo)
     img_flo = np.concatenate([img, flo], axis=0)
-
+    
     # import matplotlib.pyplot as plt
     # plt.imshow(img_flo / 255.0)
     # plt.show()
@@ -42,10 +43,16 @@ def viz(img, flo):
     #cv2.imwrite("tmp/img_flow_{}.jpg".format(i), img_flo)
     return img_flo
 
+def writeFlow(name, flow):
+    f = open(name, 'wb')
+    f.write('PIEH'.encode('utf-8'))
+    np.array([flow.shape[1], flow.shape[0]], dtype=np.int32).tofile(f)
+    flow = flow.astype(np.float32)
+    flow.tofile(f)
+
 def demo(args):
     model = torch.nn.DataParallel(RAFT(args))
-    model.load_state_dict(torch.load(args.model))
-
+    model.load_state_dict(torch.load(args.model, map_location = torch.device('cpu')))
     model = model.module
     model.to(DEVICE)
     model.eval()
@@ -66,7 +73,6 @@ def demo(args):
             #viz(image1, flow_up)
             cv2.imwrite("tmp/img_flow_{}.jpg".format(i), viz(image1, flow_up))
             i = i + 1
-
 
 
 if __name__ == '__main__':
