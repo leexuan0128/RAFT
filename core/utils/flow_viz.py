@@ -66,7 +66,6 @@ def make_colorwheel():
     colorwheel[col:col+MR, 0] = 255
     return colorwheel
 
-
 def flow_uv_to_colors(u, v, convert_to_bgr=False):
     """
     Applies the flow color wheel to (possibly clipped) flow components u and v.
@@ -102,9 +101,8 @@ def flow_uv_to_colors(u, v, convert_to_bgr=False):
         col[~idx] = col[~idx] * 0.75   # out of range
         # Note the 2-i => BGR instead of RGB
         ch_idx = 2-i if convert_to_bgr else i
-        flow_image[:,:,ch_idx] = np.floor(255 * col)
+        flow_image[:,:,ch_idx] = np.floor(255 * col)    
     return flow_image
-
 
 def flow_to_image(flow_uv, clip_flow=None, convert_to_bgr=False):
     """
