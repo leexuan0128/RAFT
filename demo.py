@@ -26,8 +26,7 @@ def load_image(imfile):
 def viz(img, flo):
     img = img[0].permute(1,2,0).cpu().numpy()
     flo = flo[0].permute(1,2,0).cpu().numpy()
-    # print(flo)
-    IO.writeFlow("raft_optical_flow.flo", flo)
+    IO.writeFlow("flowdata/raft_optical_flow.flo", flo)
     # map flow to rgb image
     flo = flow_viz.flow_to_image(flo)
     img_flo = np.concatenate([img, flo], axis=0)
@@ -39,6 +38,31 @@ def viz(img, flo):
     #cv2.imwrite("tmp/img_flow_{}.jpg".format(i), img_flo)
     # return img_flo
     return flo
+
+def epe(all_flow, gt_filename):
+    gt_filename = "GT-F-0400.pfm"
+    gt_flow = IO.readFlow(gt_filename)
+    gt_flow = torch.Tensor([gt_flow])
+    gt_flow = gt_flow.permute(0,3,1,2)
+    padder = InputPadder(gt_flow.shape)
+    gt_flow = padder.pad(gt_flow)[0]
+    gt_flow = gt_flow.numpy()
+    all_epe = []
+    for flow in all_flow:
+        flow = flow.numpy()
+        epe = np.linalg.norm(flow - gt_flow)
+        all_epe.append(epe)
+
+    import matplotlib.pyplot as plt
+    x = np.arange(1,len(all_epe)+1)
+    y = all_epe
+    plt.title("{} Iterations without Rigid_flow".format(str(len(all_epe)))) #标题
+    plt.xlabel("Iteration times") #x轴的名称
+    plt.ylabel("End-Point-Error")
+    plt.grid(True)
+    plt.plot(x,y)
+    plt.savefig("epe/raft-end-point-error-{}.png".format(str(len(all_epe))))
+    plt.show()
 
 def demo(args):
     model = torch.nn.DataParallel(RAFT(args))
@@ -53,7 +77,7 @@ def demo(args):
                  glob.glob(os.path.join(args.path, '*.jpg'))
         
         flow_init = IO.readFlow("/home/xuanli/RAFT/rigid_flow.flo")
-        flow_init = cv2.resize(flow_init,(120,68)) # interpolation = cv2.INTER_CUBIC
+        flow_init = cv2.resize(flow_init,(120,68), interpolation = cv2.INTER_CUBIC) / 8
         flow_init = flow_init[np.newaxis, :, :, :]
         flow_init = torch.from_numpy(flow_init).permute(0,3,1,2)
 
@@ -65,14 +89,13 @@ def demo(args):
 
             padder = InputPadder(image1.shape)
             image1, image2 = padder.pad(image1, image2)
-            flow_low, flow_up = model(image1, image2, flow_init, iters=14, test_mode=True)
-            # viz(image1, flow_up)
+            flow_low, flow_up, flow_all = model(image1, image2, flow_init=None, iters=15, test_mode=True)
             flow_image = viz(image1, flow_up)
             # cv2.imwrite("tmp/raft_optical_flow_{}.jpg".format(i), flow_image)
             plt.imsave("tmp/raft_optical_flow_{}.jpg".format(i), flow_image)
-            # cv2.imshow("image", flow_image[:, :, [2,1,0]]/255.0)
-            # cv2.waitkey()
             i = i + 1
+         
+    epe(flow_all, "GT-F-0400.pfm")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -84,6 +107,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     demo(args)
-
-# if __name == '__main__':
-#     demo()
