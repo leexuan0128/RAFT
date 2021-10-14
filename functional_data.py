@@ -8,7 +8,7 @@ import math
 import torch
 import torch.nn as nn
 
-torch.set_default_dtype(torch.float64)
+torch.set_default_dtype(torch.float32)
 
 def read_transformation(transformation_path):
     with open(transformation_path, 'r') as f:
@@ -31,10 +31,10 @@ def read_focal_length(focal_length):
             [0.0, 0.0, 1.0, 0.0],
             [0.0, 0.0, 0.0, 1.0]]
         fx = K[0][0]
-        K = np.array(K)
+        K = np.array(K).astype('float32')
         K = K[np.newaxis, :, :]
         K = torch.from_numpy(K)
-        inv_K = np.linalg.inv(K)
+        inv_K = np.linalg.inv(K).astype('float32')
         inv_K = torch.from_numpy(inv_K)
 
     if focal_length == 35:
@@ -85,3 +85,4 @@ def read_original_coords(height, width):
     #print(xy)
 
     return xy
+

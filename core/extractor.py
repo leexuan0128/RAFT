@@ -166,7 +166,6 @@ class BasicEncoder(nn.Module):
 
 
     def forward(self, x):
-
         # if input is list, combine batch dimension
         is_list = isinstance(x, tuple) or isinstance(x, list)
         if is_list:
@@ -187,7 +186,7 @@ class BasicEncoder(nn.Module):
             x = self.dropout(x)
 
         if is_list:
-            x = torch.split(x, [batch_dim, batch_dim], dim=0)
+            x = torch.split(x, [batch_dim, batch_dim, batch_dim], dim=0)
 
         return x
 

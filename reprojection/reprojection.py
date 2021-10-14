@@ -4,10 +4,11 @@
 import torch
 import torch.nn as nn
 
-from .backprojection import Backprojection
-from .transformation3d import Transformation3D
-from .projection import Projection
+from backprojection import Backprojection
+from transformation3d import Transformation3D
+from projection import Projection
 
+torch.set_default_dtype(torch.float32)
 
 class Reprojection(nn.Module):
     """Layer to transform pixel coordinates from one view to another view via

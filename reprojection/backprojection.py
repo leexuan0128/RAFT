@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+torch.set_default_dtype(torch.float32)
 
 class Backprojection(nn.Module):
     """Layer to backproject a depth image given the camera intrinsics
@@ -45,8 +46,10 @@ class Backprojection(nn.Module):
         Returns:
             points (Nx4x(HxW)): 3D points in homogeneous coordinates
         """
+        depth = torch.from_numpy(depth)
         depth = depth.contiguous()
 
+        # Reshape xy from [1x3x(HW)] to [Nx3xHW]
         xy = self.xy.repeat(depth.shape[0], 1, 1)
         ones = self.ones.repeat(depth.shape[0],1,1)
         

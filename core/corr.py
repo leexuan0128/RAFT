@@ -10,10 +10,13 @@ except:
 
 
 class CorrBlock:
-    def __init__(self, fmap1, fmap2, num_levels=4, radius=4):
+    def __init__(self, fmap1, fmap2, num_levels=4, radius=4, stereo_matching=False):
         self.num_levels = num_levels
         self.radius = radius
         self.corr_pyramid = []
+        self.fmap1 = fmap1
+        self.fmap2 = fmap2
+        self.sterep_matching = stereo_matching
 
         # all pairs correlation
         corr = CorrBlock.corr(fmap1, fmap2)
@@ -26,28 +29,79 @@ class CorrBlock:
             corr = F.avg_pool2d(corr, 2, stride=2)
             self.corr_pyramid.append(corr)
 
+    def corr_new(self, fmap1, fmap2, coords):
+        B, D, H, W = fmap2.shape
+        # map grid coordinates to [-1,1]
+        xgrid, ygrid = coords.split([1,1], dim=-1)
+        xgrid = 2*xgrid/(W-1) - 1
+        ygrid = 2*ygrid/(H-1) - 1
+
+        grid = torch.cat([xgrid, ygrid], dim=-1)
+        output_corr = []
+        for grid_slice in grid.unbind(3):
+            fmapw_mini = F.grid_sample(fmap2, grid_slice, align_corners=True)
+            corr = torch.sum(fmapw_mini * fmap1, dim=1)
+            output_corr.append(corr)
+        corr = torch.stack(output_corr, dim=1).permute(0,2,3,1)
+
+        return corr / torch.sqrt(torch.tensor(D).float())
+
     def __call__(self, coords):
-        r = self.radius
-        coords = coords.permute(0, 2, 3, 1)
-        batch, h1, w1, _ = coords.shape
+        if self.sterep_matching == False:
+            r = self.radius
+            coords = coords.permute(0, 2, 3, 1)
+            batch, h1, w1, _ = coords.shape
+            out_pyramid = []
+            for i in range(self.num_levels):
+                corr = self.corr_pyramid[i]
+                dx = torch.linspace(-r, r, 2*r+1).float()
+                dy = torch.linspace(-r, r, 2*r+1).float()
+                delta = torch.stack(torch.meshgrid(dy, dx), axis=-1).to(coords.device)
 
-        out_pyramid = []
-        for i in range(self.num_levels):
-            corr = self.corr_pyramid[i]
-            dx = torch.linspace(-r, r, 2*r+1)
-            dy = torch.linspace(-r, r, 2*r+1)
-            delta = torch.stack(torch.meshgrid(dy, dx), axis=-1).to(coords.device)
+                centroid_lvl = coords.reshape(batch*h1*w1, 1, 1, 2) / 2**i
+                delta_lvl = delta.view(1, 2*r+1, 2*r+1, 2)
+                coords_lvl = centroid_lvl + delta_lvl
 
-            centroid_lvl = coords.reshape(batch*h1*w1, 1, 1, 2) / 2**i
-            delta_lvl = delta.view(1, 2*r+1, 2*r+1, 2)
-            coords_lvl = centroid_lvl + delta_lvl
+                corr = bilinear_sampler(corr, coords_lvl)
+                corr = corr.view(batch, h1, w1, -1)
+                out_pyramid.append(corr)
 
-            corr = bilinear_sampler(corr, coords_lvl)
-            corr = corr.view(batch, h1, w1, -1)
-            out_pyramid.append(corr)
+            out = torch.cat(out_pyramid, dim=-1)
+            return out.permute(0, 3, 1, 2).contiguous().float()
+        else:
+            r = self.radius
+            fmap1 = self.fmap1
+            fmap2 = self.fmap2 
+            coords = coords.permute(0, 2, 3, 1)
+            batch, h1, w1, _ = coords.shape
+            out_pyramid = []
+            for i in range(self.num_levels):
+                corr = self.corr_pyramid[i]
+                dx = torch.linspace(-r, r, 2*r+1).float()
+                dy = torch.linspace(-r, r, 2*r+1).float()
+                delta = torch.stack(torch.meshgrid(dy, dx), axis=-1).to(coords.device)
+                centroid_lvl = coords.reshape(batch*h1*w1, 1, 1, 2) / 2**i
+                delta_lvl = delta.view(1, 2*r+1, 2*r+1, 2)
+                coords_lvl = centroid_lvl + delta_lvl
+                corr = bilinear_sampler(corr, coords_lvl)
+                corr = corr.view(batch, h1, w1, -1)
+                out_pyramid.append(corr)
+                
+                # dx = torch.zeros(1)
+                # dx = torch.linspace(-r, r, 2*r+1)
+                # dy = torch.linspace(-r, r, 2*r+1)
+                # delta = torch.stack(torch.meshgrid(dy, dx), axis=-1).to(coords.device)
 
-        out = torch.cat(out_pyramid, dim=-1)
-        return out.permute(0, 3, 1, 2).contiguous().float()
+                # centroid_lvl = coords.reshape(batch, h1, w1, 1, 2).clone()
+                # centroid_lvl[...,0] = centroid_lvl[...,0] / 2**i
+                # coords_lvl = centroid_lvl + delta.view(-1, 2)
+                
+                # corr = self.corr_new(fmap1, fmap2, coords_lvl)
+                # fmap2 = F.avg_pool2d(fmap2, [1, 2], stride=[1, 2])
+                # out_pyramid.append(corr)
+
+            out = torch.cat(out_pyramid, dim=-1)
+            return out.permute(0, 3, 1, 2).contiguous().float()
 
     @staticmethod
     def corr(fmap1, fmap2):

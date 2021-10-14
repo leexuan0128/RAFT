@@ -4,6 +4,7 @@
 import torch
 import torch.nn as nn
 
+torch.set_default_dtype(torch.float32)
 
 class Transformation3D(nn.Module):
     """Layer which transform 3D points

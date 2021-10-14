@@ -4,6 +4,7 @@
 import torch
 import torch.nn as nn
 
+torch.set_default_dtype(torch.float32)
 
 class Projection(nn.Module):
     """Layer which projects 3D points into a camera view
@@ -15,7 +16,7 @@ class Projection(nn.Module):
         self.width = width
         self.eps = eps
 
-    def forward(self, points3d, K, normalized=True):
+    def forward(self, points3d, K, normalized=False):
         """
         Args:
             points3d (Nx4x(HxW)): 3D points in homogeneous coordinates

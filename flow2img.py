@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import os.path
 import IO
 import flow_vis
+import cv2
 
 #from rigid_flow import*
 
@@ -49,15 +50,17 @@ def flow2img(flow_data):
 
 	return img
 
-def visulize_flow_file(flow_filename, save_dir=True):
-	flow_data = IO.readFlow(flow_filename)
+def visulize_flow_file(flow, save_dir=True):
+	flow_data = IO.readFlow(flow)
 	# img = flow2img(flow_data)
+	# flow = flow.cpu().numpy()
 	img = flow_vis.flow_to_color(flow_data, convert_to_bgr=False)
+	# cv2.imwrite("tmp/raft_rigid_flow_back-vis.png", img)
 	plt.imshow(img)
-	#plt.show()
+	# plt.show()
 	if save_dir:
-		idx = flow_filename.rfind("/") + 1
-		plt.imsave(os.path.join("%s-vis.png" % flow_filename[idx:-4]), img)
+		# idx = flow_filename.rfind("/") + 1
+		plt.imsave("tmp/raft_rigid_flow_back-vis.png", img)
 
 def compute_color(u, v):
 	"""
