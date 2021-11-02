@@ -10,20 +10,6 @@ import torch.nn as nn
 
 torch.set_default_dtype(torch.float32)
 
-def read_transformation(transformation_path):
-    with open(transformation_path, 'r') as f:
-        lines = f.readlines()
-        T1_data = lines[0].split(' ')
-        T2_data = lines[2].split(' ')
-        T1_data = np.array(T1_data, dtype=float).reshape(4,4)
-        T2_data = np.array(T2_data, dtype=float).reshape(4,4)
-
-        inv_T1_data = np.linalg.inv(T1_data)
-        # inv_T2_data = np.linalg.inv(T2_data) 
-        T_21 = np.dot(inv_T1_data, T2_data)
-        
-    return T_21
-
 def read_focal_length(focal_length):
     if focal_length == 15:
         K = [[450.0, 0.0, 479.5, 0.0],
@@ -46,23 +32,59 @@ def read_focal_length(focal_length):
         K = np.array(K)
         K = K[np.newaxis, :, :]
         K = torch.from_numpy(K)
-        inv_K = np.linalg.inv(K)
+        inv_K = np.linalg.inv(K).astype('float32')
         inv_K = torch.from_numpy(inv_K)
 
     return fx, K, inv_K
+
+def read_transformation(transformation_path):
+    with open(transformation_path, 'r') as f:
+        lines = f.readlines()
+        T1_data = lines[0].split(' ')
+        T2_data = lines[2].split(' ')
+        T1_data = np.array(T1_data, dtype='float32').reshape(4,4)
+        T2_data = np.array(T2_data, dtype='float32').reshape(4,4)
+
+        inv_T1_data = np.linalg.inv(T1_data)
+        # inv_T2_data = np.linalg.inv(T2_data) 
+        T_21 = np.dot(inv_T1_data, T2_data)
+        
+    return T_21
 
 def read_baseline(baseline_path):
     with open(baseline_path, 'r') as b:
         lines = b.readlines()
         T_L = lines[0].split(' ')
         T_R = lines[1].split(' ')
-        T_L = np.array(T_L, dtype=float).reshape(4,4)
-        T_R = np.array(T_R, dtype=float).reshape(4,4)
+        T_L = np.array(T_L, dtype='float32').reshape(4,4)
+        T_R = np.array(T_R, dtype='float32').reshape(4,4)
         inv_TR = np.linalg.inv(T_R)
         T_RL = np.dot(inv_TR, T_L)
         Baseline = abs(round(T_RL[0][3]))
 
     return Baseline
+
+def read_T_and_B(camera_data, i):
+    with open(camera_data, 'r') as c:
+        lines = c.readlines()
+        T_1L_data = lines[(i+1)*4+1].lstrip('L ').split(' ')
+        T_1R_data = lines[(i+1)*4+2].lstrip('R ').split(' ')
+        T_2L_data = lines[4*(i+1)-3].lstrip('L ').split(' ')
+
+        # T
+        T_1L_data = np.array(T_1L_data, dtype='float32').reshape(4,4)
+        T_2L_data = np.array(T_2L_data, dtype='float32').reshape(4,4)
+        inv_T_1L_data = np.linalg.inv(T_1L_data)
+        T_21 = np.dot(inv_T_1L_data, T_2L_data)
+
+        # B
+        T_1R_data = np.array(T_1R_data, dtype='float32').reshape(4,4)
+        inv_T_1R_data = np.linalg.inv(T_1R_data)
+        T_RL = np.dot(inv_T_1R_data, T_1L_data)
+        Baseline = abs(round(T_RL[0][3]))
+
+    return T_21, Baseline
+
 
 def read_original_coords(height, width):
     # generate regular grid

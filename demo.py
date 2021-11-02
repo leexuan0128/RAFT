@@ -30,16 +30,7 @@ def load_image(imfile):
 def viz(img, flo):
     img = img[0].permute(1,2,0).cpu().numpy()
     flo = flo[0].permute(1,2,0).cpu().numpy()
-    #IO.writeFlow("flowdata/optical_flow.flo", flo)
-    # map flow to rgb image
-    flo = flow_viz.flow_to_image(flo)
-    # img_flo = np.concatenate([img, flo], axis=0)
-    # import matplotlib.pyplot as plt
-    # plt.imshow(img_flo / 255.0)
-    # plt.show()
-    #cv2.imshow('image', img_flo[:, :, [2,1,0]]/255.0)
-    #cv2.waitKey()
-    #cv2.imwrite("tmp/img_flow_{}.jpg".format(i), img_flo)
+    flo = flow_viz.flow_to_image(flo)# map flow to rgb image
 
     return flo
 
@@ -55,38 +46,53 @@ def demo(args):
                  glob.glob(os.path.join(args.path, '*.jpg'))
         stereo_images = glob.glob(os.path.join(args.path2, '*.png')) + \
                         glob.glob(os.path.join(args.path2, '*.jpg'))
+        gt_flow_all = glob.glob(os.path.join("gt_optical_flow", '*.pfm'))
+        
         # call flow_init
         #flow_init = init_flow.get_flow_init("rigid_flow_back.flo")
 
         images = sorted(images)
         stereo_images = sorted(stereo_images)
-        i = 1
-        
-        for imfile1, imfile2 in zip(images[1:], images[:-1]): # backward optical flow
-            
-            for stereoim1, stereoim2 in zip(stereo_images[1:], stereo_images[:-1]): # stereo matching
-                stereo_image1 = load_image(stereoim1)
-                stereo_image2 = load_image(stereoim2)
-                padder = InputPadder(stereo_image1.shape)
-                stereo_image1, stereo_image2 = padder.pad(stereo_image1, stereo_image2)
+        gt_flow_all = sorted(gt_flow_all)
+
+        i = 0
+        epe_list = []
+        single_epe_list = []
+        for imfile1, imfile2 in zip(images[1:], images[:-1]): #backward optical flow 
+            # for stereoim1, stereoim2 in zip(stereo_images[1:], stereo_images[:-1]): # stereo pairs
+            stereoim1 = stereo_images[i+1]
+            stereo_image1 = load_image(stereoim1)
+            #stereo_image2 = load_image(stereoim2)
+            padder = InputPadder(stereo_image1.shape) # padding img to be divided by 8
+            stereo_image1 = padder.pad(stereo_image1)[0]
 
             image1 = load_image(imfile1)
             image2 = load_image(imfile2)
-            # padding img to be divided by 8
-            padder = InputPadder(image1.shape)
+            padder = InputPadder(image1.shape) # padding img to be divided by 8
             image1, image2 = padder.pad(image1, image2)
 
             #flow_low: 1/8 flow, flow_up: full resolution flow, flow_all: all iters flow
-            flow_low, flow_up, flow_all = model(image1, image2, stereo_image1, stereo_mode=True, flow_init=0, iters=10, test_mode=True)
-            
+            flow_low, flow_up, flow_all, disparity = model(image1, image2, stereo_image1, i, stereo_mode=True, flow_init=0, iters=15, test_mode=True)
             flow_image = viz(image1, flow_up)
-            # cv2.imwrite("tmp/raft_optical_flow_{}.jpg".format(i), flow_image)
-            plt.imsave("tmp/raft_rigid_flow_back_{}.jpg".format(i), flow_image)
+            
+            #plt.imsave("final_disparity/disparity_{}.png".format(i), disparity, cmap="jet")
+            #depth_map = (450.0 * 1.0) / abs(disparity)
+            #cv2.imwrite("final_depth/depth_{}.png".format(i), depth_map)
+            #plt.imsave("final_optical_flow/raft_rigid_flow_back_{}.png".format(i), flow_image)
+            
+            epe_s = epe.get_epe(flow_up, gt_flow_all[i])
+            epe_list.append(epe_s.view(-1).numpy())
+            single_epe_list.append(np.mean(epe_s.view(-1).numpy()))
 
             i = i + 1
 
-    #evaluation via epe
-    epe.get_epe(flow_all, "GT-B-0401.pfm")
+        epe_all = np.concatenate(epe_list)
+        avg_epe = np.mean(epe_all)
+        px1 = np.mean(epe_all<1)
+        px3 = np.mean(epe_all<3)
+        px5 = np.mean(epe_all<5)
+        # print("Validation Avg EPE: %f" % avg_epe)
+        print("Validation Avg EPE: %f, 1px: %f, 3px: %f, 5px: %f" % (avg_epe, px1, px3, px5))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

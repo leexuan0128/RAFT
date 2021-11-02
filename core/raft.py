@@ -11,7 +11,7 @@ import read_gt_dis
 from update import BasicUpdateBlock, SmallUpdateBlock
 from extractor import BasicEncoder, SmallEncoder
 from corr import CorrBlock, AlternateCorrBlock
-from utils.utils import bilinear_sampler, coords_grid, upflow8
+from utils.utils import bilinear_sampler, coords_grid, upflow8, InputPadder
 
 try:
     autocast = torch.cuda.amp.autocast
@@ -88,7 +88,7 @@ class RAFT(nn.Module):
 
         return up_flow.reshape(N, 2, 8*H, 8*W)
 
-    def forward(self, image1, image2, stereo_image1, stereo_mode=False, flow_init=None, iters=12, upsample=True, test_mode=False):
+    def forward(self, image1, image2, stereo_image1, i, stereo_mode=False, flow_init=None, iters=12, upsample=True, test_mode=False):
         """ Estimate optical flow and depth between pair of frames """
 
         image1 = 2 * (image1 / 255.0) - 1.0
@@ -111,6 +111,7 @@ class RAFT(nn.Module):
 
         if self.args.alternate_corr:
             corr_fn = AlternateCorrBlock(fmap1, fmap2, radius=self.args.corr_radius)
+            #stereo_corr_fn = CorrBlock(fmap1, fmap3, radius=self.args.corr_radius, stereo_matching=True) # stereo matching corr
         else:
             corr_fn = CorrBlock(fmap1, fmap2, radius=self.args.corr_radius) # F corr 
             stereo_corr_fn = CorrBlock(fmap1, fmap3, radius=self.args.corr_radius, stereo_matching=True) # stereo matching corr
@@ -140,20 +141,28 @@ class RAFT(nn.Module):
                     disparity_up = upflow8(coords2 - coords0)
                 else:
                     disparity_up = self.upsample_flow(coords2 - coords0, up_mask)    
-            # disparity = disparity_up[:,:1]
-            disparity = np.load("raft-stereo.npy")
-            # disparity = read_gt_dis.read_pfm("gt_dis_0401.pfm")
-            disparity_img = -disparity
-            # disparity_img = disparity_img.cpu().numpy().squeeze()
-            plt.imsave("dis2.png", disparity_img, cmap="gray")
-            
-            # Insert rigid flow as initialization
-            raft_rigid_flow = rigid_flow.get_rigid_flow(disparity)
-            raft_flow_init = init_flow.get_flow_init(raft_rigid_flow)
+            disparity = disparity_up[:,:1]
+            # disparity = np.load("raft-stereo.npy")
+            # disparity = read_gt_dis.read_pfm("gt_disparity/gt_dis_0401.pfm")
 
+            disparity_img = -disparity
+            disparity_img = disparity_img.cpu().numpy().squeeze()
+
+            # disparity_img = cv2.resize(disparity_img, (960,544), interpolation=cv2.INTER_NEAREST)
+            # disparity_img = torch.tensor(disparity_img.copy())
+            # disparity_img = disparity_img.unsqueeze(0)
+            # disparity_img = disparity_img.cpu().numpy().squeeze()
+            # plt.imsave("final_disparity/disparity.{}.png".format(i), disparity_img, cmap="gray")
+            
+
+            # compute the rigid flow
+            raft_rigid_flow = rigid_flow.get_rigid_flow(disparity_img, i)
+            # Insert rigid flow as initialization
+            raft_flow_init = init_flow.get_flow_init(raft_rigid_flow)
+        
         # predict optical flow
         if flow_init is not None:
-            coords1 = coords1 + raft_flow_init
+            coords1 = coords1 + raft_flow_init # add the initialization
 
         flow_predictions = []
         for itr in range(iters):   
@@ -162,8 +171,7 @@ class RAFT(nn.Module):
             flow = coords1 - coords0
             with autocast(enabled=self.args.mixed_precision):
                 net, up_mask, delta_flow = self.update_block(net, inp, corr, flow)
-            # F(t+1) = F(t) + \Delta(t)
-            coords1 = coords1 + delta_flow
+            coords1 = coords1 + delta_flow # F(t+1) = F(t) + \Delta(t)
             # upsample predictions
             if up_mask is None:
                 flow_up = upflow8(coords1 - coords0)
@@ -172,6 +180,6 @@ class RAFT(nn.Module):
             flow_predictions.append(flow_up)
 
         if test_mode:
-            return coords1 - coords0, flow_up, flow_predictions
+            return coords1 - coords0, flow_up, flow_predictions, disparity_img
             
         return flow_predictions

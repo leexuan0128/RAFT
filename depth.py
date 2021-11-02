@@ -44,7 +44,7 @@ def create_depths_map(disparity, focal_length, baseline, height, width):
     # plt.imshow(depth_img, cmap='gray')
     # plt.savefig("tmp/depth_map_raft.png")
     # plt.imsave("tmp/depth_map_raft.png", depth_map, cmap="gray")
-    cv2.imwrite("tmp/depth_map_raft.png", depth_map)
+    # cv2.imwrite("tmp/depth_map_raft.png", depth_map)
     depth_map = depth_map[np.newaxis, np.newaxis, :, :]
 
     # depth_map (Nx1xHxW)

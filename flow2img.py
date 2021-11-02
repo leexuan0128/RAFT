@@ -60,7 +60,7 @@ def visulize_flow_file(flow, save_dir=True):
 	# plt.show()
 	if save_dir:
 		# idx = flow_filename.rfind("/") + 1
-		plt.imsave("tmp/raft_rigid_flow_back-vis.png", img)
+		plt.imsave((flow + ".png"), img)
 
 def compute_color(u, v):
 	"""
